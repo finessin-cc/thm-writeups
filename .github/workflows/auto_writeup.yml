@@ -1,0 +1,95 @@
+name: Generate Writeup Automatically
+
+on:
+  workflow_dispatch:
+    inputs:
+      room_name:
+        description: 'Name of the TryHackMe Room'
+        required: true
+        type: string
+      difficulty:
+        description: 'Difficulty level'
+        required: false
+        default: 'Easy'
+        type: choice
+        options:
+          - Easy
+          - Medium
+          - Hard
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate Writeup Skeleton
+        id: ai
+        run: |
+          ROOM="${{ github.event.inputs.room_name }}"
+          DIFF="${{ github.event.inputs.difficulty }}"
+          FILENAME=$(echo "$ROOM" | tr '[:upper:]' '[:lower:]' | tr ' ' '_').md
+          mkdir -p writeups
+          
+          cat <<EOF > "writeups/$FILENAME"
+          # TryHackMe: $ROOM
+          
+          - **Difficulty:** $DIFF
+          - **Date:** $(date +'%Y-%m-%d')
+          - **Platform:** TryHackMe
+          
+          ## 🎯 Description
+          Automated writeup skeleton for the **$ROOM** room.
+          
+          ## 🔍 Phase 1: Reconnaissance (Nmap & Web Enumeration)
+          \`\`\`bash
+          nmap -sC -sV -oN nmap/initial \$(target_ip)
+          \`\`\`
+          *Reviewing open ports and identifying potential entry points based on the room type.*
+          
+          ## 🚀 Phase 2: Exploitation / Initial Access
+          1. Identified vulnerable services or misconfigurations.
+          2. Executed relevant exploit or brute-force vector to gain a user shell.
+          3. Captured the user flag.
+          
+          *User Flag:* \`THM{REDACTED_USER_FLAG}\`
+          
+          ## 👑 Phase 3: Privilege Escalation
+          * Checking \`sudo -l\` permissions.
+          * SUID binaries exploitation or kernel vulnerability check.
+          * Escalated privileges to root.
+          
+          *Root Flag:* \`THM{REDACTED_ROOT_FLAG}\`
+          
+          ## 📝 Takeaways
+          * Always check for basic misconfigurations before trying complex exploits.
+          EOF
+          
+          echo "filename=$FILENAME" >> $GITHUB_OUTPUT
+
+      - name: Update README Table
+        run: |
+          ROOM="${{ github.event.inputs.room_name }}"
+          FILENAME="${{ steps.ai.outputs.filename }}"
+          DATE=$(date +'%Y-%m-%d')
+          NEW_ROW="| $DATE | [$ROOM](writeups/$FILENAME) | \`TryHackMe\` | ✅ Completed |"
+          
+          if grep -q "| --- |" README.md; then
+            sed -i "/| --- |/a $NEW_ROW" README.md
+          else
+            echo -e "\n$NEW_ROW" >> README.md
+          fi
+
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Auto-generated writeup for ${{ github.event.inputs.room_name }}"
+          git push
