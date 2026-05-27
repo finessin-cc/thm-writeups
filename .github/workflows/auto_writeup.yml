@@ -43,11 +43,21 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
+      - name: Install Local AI Engine (Ollama)
         run: |
-          pip install requests
+          echo "[*] Installing Ollama locally..."
+          curl -fsSL https://ollama.com/install.sh | sh
+          
+          echo "[*] Starting Ollama background service..."
+          ollama serve > /dev/null 2>&1 &
+          
+          echo "[*] Waiting for server to wake up..."
+          sleep 5
+          
+          echo "[*] Pulling smart developer model (Qwen 2.5 Coder)..."
+          ollama pull qwen2.5-coder:1.5b
 
-      - name: Generate Smart Writeup and Update README
+      - name: Generate Smart Writeup via Local AI
         id: script
         env:
           ROOM_NAME: ${{ github.event.inputs.room_name }}
@@ -67,48 +77,52 @@ jobs:
           room_dump = os.getenv("ROOM_DUMP")
           current_date = datetime.now().strftime('%Y-%m-%d')
 
-          # Формируем жесткий и понятный промпт для ИИ без использования кавычек внутри строки
-          prompt_content = (
-              f"You are an Expert Cyber Security Analyst. Generate a detailed, highly technical "
-              f"Markdown writeup for the TryHackMe room '{room_name}'.\n"
-              f"Metadata: Type={room_type}, Difficulty={room_diff}, Date={current_date}.\n\n"
-              f"Task: Based on the raw room dump text provided below, extract ALL important parts: "
-              f"tasks, sub-tasks, questions, answers (redact them as THM{{REDACTED}}), logs, alert fields, "
-              f"investigation steps, and code snippets. Do NOT write generic summaries. Structure it like "
-              f"a real, completed walkthough or CTF report. Output ONLY clean markdown starting with # TryHackMe.\n\n"
-              f"--- RAW ROOM DUMP ---\n{room_dump}"
+          # Точные указания для локальной модели
+          system_instruction = (
+              "You are an Expert Cyber Security Analyst. Your job is to analyze the provided raw TryHackMe room data dump "
+              "and write a highly detailed, comprehensive markdown writeup. "
+              "Do not use generic templates or placeholders like 'Summary of topics'. "
+              "Extract real logs, commands, questions, and specific details from the text. "
+              "Format everything cleanly using markdown headers, bullet points, tables, and code blocks. "
+              "Keep sensitive answers or flags redacted using standard format like THM{REDACTED}."
           )
 
-          # Базовый аварийный контент (если сеть совсем упадет)
-          fallback_content = f"# TryHackMe: {room_name}\n\n| Metadata | Value |\n| --- | --- |\n| **Date** | {current_date} |\n\n## Analysis Failed\nAI request blocked."
+          prompt_content = (
+              f"Create a deep technical markdown walkthrough report for TryHackMe room: '{room_name}'.\n"
+              f"Metadata: Type={room_type}, Difficulty={room_diff}, Date={current_date}.\n\n"
+              f"Analyze this raw room dump and extract every single detail, task description, log, and question into the report:\n"
+              f"--- RAW DATA DUMP ---\n{room_dump}\n---------------------\n"
+              f"Output ONLY clean markdown starting with # TryHackMe: {room_name}."
+          )
 
-          result = None
+          print("[*] Sending dump to your local AI engine...")
           
+          result = None
           try:
-              print("[*] Connecting to stable Llama-3 generation cluster...")
-              # Используем Pollinations, но через чистый POST-запрос к проверенной модели qwen-coder/llama
+              # Отправляем запрос на локальный хост виртуалки
               response = requests.post(
-                  "https://text.pollinations.ai/",
+                  "http://127.0.0.1:11434/api/generate",
                   json={
-                      "messages": [
-                          {"role": "user", "content": prompt_content}
-                      ],
-                      "model": "qwen-coder",
-                      "jsonMode": False
+                      "model": "qwen2.5-coder:1.5b",
+                      "prompt": f"{system_instruction}\n\n{prompt_content}",
+                      "stream": False,
+                      "options": {
+                          "temperature": 0.2,
+                          "num_ctx": 8192  # Расширяем контекст, чтобы влез большой дамп логов
+                      }
                   },
-                  timeout=60
+                  timeout=180
               )
-              
-              if response.status_code == 200 and len(response.text) > 300:
-                  result = response.text
-                  print("[+] Success! Real AI writeup generated.")
+              if response.status_code == 200:
+                  result = response.json().get("response", "").strip()
+                  print("[+] Local AI successfully generated a customized writeup!")
           except Exception as e:
-              print(f"[-] AI connection failed: {e}")
+              print(f"[-] Local AI generation failed: {e}")
 
           if not result:
-              result = fallback_content
+              result = f"# TryHackMe: {room_name}\n\n| Metadata | Value |\n| --- | --- |\n| **Status** | Local Engine Error |\n"
 
-          # Очистка имени файла
+          # Имя файла
           filename = room_name.lower().replace(" ", "_")
           filename = "".join(c for c in filename if c.isalnum() or c in "._-") + ".md"
 
@@ -165,5 +179,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "AI smart writeup for ${{ github.event.inputs.room_name }}" || echo "No changes to commit"
+          git commit -m "Writeup generated by local AI for ${{ github.event.inputs.room_name }}" || echo "No changes to commit"
           git push
