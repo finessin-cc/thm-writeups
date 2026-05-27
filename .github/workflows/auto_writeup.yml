@@ -7,15 +7,25 @@ on:
         description: 'Name of the TryHackMe Room'
         required: true
         type: string
+      room_type:
+        description: 'Type of the room'
+        required: true
+        default: 'CTF'
+        type: choice
+        options:
+          - CTF (Challenge)
+          - Walkthrough (Guided/Theory)
       difficulty:
         description: 'Difficulty level'
         required: false
         default: 'Easy'
         type: choice
         options:
+          - Info / Intro
           - Easy
           - Medium
           - Hard
+          - Insane
 
 jobs:
   build-and-commit:
@@ -29,47 +39,102 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Generate Writeup Skeleton
+      - name: Generate Universal Writeup
         id: ai
         run: |
           ROOM="${{ github.event.inputs.room_name }}"
+          TYPE="${{ github.event.inputs.room_type }}"
           DIFF="${{ github.event.inputs.difficulty }}"
+          
           FILENAME=$(echo "$ROOM" | tr '[:upper:]' '[:lower:]' | tr ' ' '_').md
-          mkdir -p writeups
+          FILENAME=$(echo "$FILENAME" | sed 's/[^a-zA-Z0-9_.]//g')
+          TARGET_DIR="writeups"
           
-          cat <<EOF > "writeups/$FILENAME"
-          # TryHackMe: $ROOM
+          # Проверяем тип комнаты и генерируем соответствующий шаблон
+          if [ "$TYPE" = "CTF (Challenge)" ]; then
+            # Шаблон для CTF комнат
+            cat <<EOF > "$TARGET_DIR/$FILENAME"
+          # TryHackMe: $ROOM (CTF)
           
-          - **Difficulty:** $DIFF
-          - **Date:** $(date +'%Y-%m-%d')
-          - **Platform:** TryHackMe
+          | Metadata | Value |
+          | :--- | :--- |
+          | **Platform** | [TryHackMe](https://tryhackme.com/) |
+          | **Room Type** | \`CTF / Challenge\` |
+          | **Difficulty** | \`$DIFF\` |
+          | **Date Completed** | $(date +'%Y-%m-%d') |
           
-          ## 🎯 Description
-          Automated writeup skeleton for the **$ROOM** room.
+          ---
           
-          ## 🔍 Phase 1: Reconnaissance (Nmap & Web Enumeration)
+          ## 📝 Executive Summary
+          This writeup covers the penetration testing methodology used to compromise the **$ROOM** machine. The process involves active reconnaissance, vulnerability exploitation, and privilege escalation to gain full root access.
+          
+          ## 🔍 Phase 1: Reconnaissance & Enumeration
           \`\`\`bash
-          nmap -sC -sV -oN nmap/initial \$(target_ip)
+          # Initial network scanning
+          nmap -sC -sV -oN nmap_report \${TARGET_IP}
           \`\`\`
-          *Reviewing open ports and identifying potential entry points based on the room type.*
+          *Enumeration of open ports, services, and hidden web directories.*
           
-          ## 🚀 Phase 2: Exploitation / Initial Access
-          1. Identified vulnerable services or misconfigurations.
-          2. Executed relevant exploit or brute-force vector to gain a user shell.
-          3. Captured the user flag.
+          ## 🚀 Phase 2: Exploitation
+          * **Vulnerability:** (e.g., Public CVE, Misconfiguration, Weak Credentials)
+          * **Action:** Exploit execution to drop a low-privilege reverse shell.
           
-          *User Flag:* \`THM{REDACTED_USER_FLAG}\`
+          > 🚩 **User Flag:** \`THM{REDACTED_USER_FLAG}\`
           
           ## 👑 Phase 3: Privilege Escalation
-          * Checking \`sudo -l\` permissions.
-          * SUID binaries exploitation or kernel vulnerability check.
-          * Escalated privileges to root.
+          * **Vector:** (e.g., SUID, Cron jobs, \`sudo -l\` misconfiguration)
+          * **Action:** Escalating privileges to the root user.
           
-          *Root Flag:* \`THM{REDACTED_ROOT_FLAG}\`
+          > 🚩 **Root Flag:** \`THM{REDACTED_ROOT_FLAG}\`
           
-          ## 📝 Takeaways
-          * Always check for basic misconfigurations before trying complex exploits.
+          ---
+          ## 🧠 Key Takeaways
+          * Document critical lessons learned from this challenge here.
           EOF
+          
+          else
+            # Шаблон для Walkthrough / Теоретических комнат
+            cat <<EOF > "$TARGET_DIR/$FILENAME"
+          # TryHackMe: $ROOM (Walkthrough)
+          
+          | Metadata | Value |
+          | :--- | :--- |
+          | **Platform** | [TryHackMe](https://tryhackme.com/) |
+          | **Room Type** | \`Walkthrough / Guided\` |
+          | **Difficulty** | \`$DIFF\` |
+          | **Date Completed** | $(date +'%Y-%m-%d') |
+          
+          ---
+          
+          ## 📖 Room Overview
+          The **$ROOM** room is a guided educational walkthrough focused on teaching core concepts about cybersecurity, specific tools, or concepts. 
+          
+          ---
+          
+          ## 🧭 Guided Tasks & Answers
+          
+          ### 📑 Task 1: Introduction / Deployment
+          *Overview of the room goals and setting up the target environment.*
+          * **Question:** Room deployed? -> *Answer: No answer needed*
+          
+          ### 📑 Task 2: Core Concepts & Theory
+          *Notes on the main theoretical part covered in this section.*
+          * **Key Concept 1:** (Write down important notes or commands learned)
+          * **Question/Flag:** \`THM{REDACTED_TASK_FLAG}\`
+          
+          ### 📑 Task 3: Practical Application / Lab
+          *Step-by-step walkthrough of the practical steps shown in the guide.*
+          \`\`\`bash
+          # Example of tool usage learned in this task
+          tool_name -h
+          \`\`\`
+          * **Question/Flag:** \`THM{REDACTED_TASK_FLAG}\`
+          
+          ---
+          ## 🧠 Summary & Key Takeaways
+          * What new tools, techniques, or security concepts did this walkthrough teach?
+          EOF
+          fi
           
           echo "filename=$FILENAME" >> $GITHUB_OUTPUT
 
@@ -78,7 +143,13 @@ jobs:
           ROOM="${{ github.event.inputs.room_name }}"
           FILENAME="${{ steps.ai.outputs.filename }}"
           DATE=$(date +'%Y-%m-%d')
-          NEW_ROW="| $DATE | [$ROOM](writeups/$FILENAME) | \`TryHackMe\` | ✅ Completed |"
+          DIFF="${{ github.event.inputs.difficulty }}"
+          TYPE="${{ github.event.inputs.room_type }}"
+          
+          # Короткое имя типа для таблицы
+          if [ "$TYPE" = "CTF (Challenge)" ]; then R_TYPE="CTF"; else R_TYPE="Walkthrough"; fi
+          
+          NEW_ROW="| $DATE | [$ROOM](writeups/$FILENAME) | \`TryHackMe\` | \`$R_TYPE\` | \`$DIFF\` | ✅ Completed |"
           
           if grep -q "| --- |" README.md; then
             sed -i "/| --- |/a $NEW_ROW" README.md
@@ -91,5 +162,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Auto-generated writeup for ${{ github.event.inputs.room_name }}"
+          git commit -m "Auto-generated writeup ($R_TYPE) for $ROOM"
           git push
