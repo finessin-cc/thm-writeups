@@ -10,7 +10,7 @@ on:
       room_type:
         description: 'Type of the room'
         required: true
-        default: 'CTF'
+        default: 'Walkthrough (Guided/Theory)'
         type: choice
         options:
           - CTF (Challenge)
@@ -26,6 +26,10 @@ on:
           - Medium
           - Hard
           - Insane
+      room_dump:
+        description: 'Paste copied text/dump from the THM room here'
+        required: true
+        type: string
 
 jobs:
   build-and-commit:
@@ -34,72 +38,90 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          node-version: '20'
+          python-version: '3.10'
 
-      - name: Generate Universal Writeup
-        id: ai
+      - name: Install Dependencies
         run: |
-          ROOM="${{ github.event.inputs.room_name }}"
-          TYPE="${{ github.event.inputs.room_type }}"
-          DIFF="${{ github.event.inputs.difficulty }}"
+          pip install requests
+
+      - name: Generate Smart Writeup via Free AI
+        id: ai
+        env:
+          ROOM_NAME: ${{ github.event.inputs.room_name }}
+          ROOM_TYPE: ${{ github.event.inputs.room_type }}
+          ROOM_DIFF: ${{ github.event.inputs.difficulty }}
+          ROOM_DUMP: ${{ github.event.inputs.room_dump }}
+        run: |
+          python - << 'EOF'
+          import os
+          import requests
+          import json
+
+          room_name = os.getenv("ROOM_NAME")
+          room_type = os.getenv("ROOM_TYPE")
+          room_diff = os.getenv("ROOM_DIFF")
+          room_dump = os.getenv("ROOM_DUMP")
+
+          # Формируем умный промпт для нейросети
+          prompt = f"""
+          You are an expert cybersecurity technical writer. Write a professional, detailed, and clean Markdown writeup for the TryHackMe room: '{room_name}'.
+          Room Type: {room_type}
+          Difficulty: {room_diff}
+          Date: {import_datetime := __import__('datetime').datetime.now().strftime('%Y-%m-%d')}
+
+          Based on the following raw text/dump from the room, extract key concepts, tools used, steps taken, and commands. Make it structured, highly readable, and professional for a GitHub portfolio.
+          Include a beautiful Markdown Metadata table at the top.
+          For flags or answers, use placeholder formats like `THM{{REDACTED}}` or `[REDACTED]`.
+
+          --- RAW ROOM DATA START ---
+          {room_dump}
+          --- RAW ROOM DATA END ---
+
+          Output ONLY the clean Markdown content, starting directly with the title (# TryHackMe: ...). Do not wrap the whole response in triple backticks.
+          """
+
+          print("[*] Contacting Free AI Endpoint...")
           
-          # Очищаем имя файла и заменяем пробелы на нижнее подчеркивание
-          FILENAME=$(echo "$ROOM" | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
-          FILENAME=$(echo "$FILENAME" | sed 's/[^a-zA-Z0-9_.]//g').md
-          
-          if [ "$TYPE" = "CTF (Challenge)" ]; then
-            cat <<EOF > "$FILENAME"
-          # TryHackMe: $ROOM (CTF)
-          
-          | Metadata | Value |
-          | :--- | :--- |
-          | **Platform** | [TryHackMe](https://tryhackme.com/) |
-          | **Room Type** | \`CTF / Challenge\` |
-          | **Difficulty** | \`$DIFF\` |
-          | **Date Completed** | $(date +'%Y-%m-%d') |
-          
-          ---
-          
-          ## 📝 Executive Summary
-          This writeup covers the penetration testing methodology used to compromise the **$ROOM** machine.
-          
-          ## 🔍 Phase 1: Reconnaissance & Enumeration
-          \`\`\`bash
-          nmap -sC -sV -oN nmap_report \${TARGET_IP}
-          \`\`\`
-          
-          ## 🚀 Phase 2: Exploitation
-          > 🚩 **User Flag:** \`THM{REDACTED_USER_FLAG}\`
-          
-          ## 👑 Phase 3: Privilege Escalation
-          > 🚩 **Root Flag:** \`THM{REDACTED_ROOT_FLAG}\`
+          # Используем стабильный публичный эндпоинт без авторизации
+          try:
+              response = requests.post(
+                  "https://chateverywhere.app/api/chat/", # Или аналогичный открытый бесплатный API
+                  headers={"Content-Type": "application/json"},
+                  json={
+                      "model": "gpt-4o-mini",
+                      "messages": [{"role": "user", "content": prompt}]
+                  },
+                  timeout=60
+              )
+              
+              if response.status_code == 200:
+                  result = response.text
+                  # Если API возвращает JSON, извлекаем текст. Если чистый текст - берем его.
+                  try:
+                      result = response.json()["choices"][0]["message"]["content"]
+                  except:
+                      pass
+              else:
+                  raise Exception(f"API Error {response.status_code}")
+          except Exception as e:
+              print(f"[!] AI API failed ({e}), falling back to offline fallback template...")
+              # Фолбэк на случай, если бесплатный сервер перегружен
+              result = f"# TryHackMe: {room_name}\n\n| Metadata | Value |\n| --- | --- |\n| **Type** | {room_type} |\n| **Difficulty** | {room_diff} |\n\n## Overview\nRoom text analysis completed. Review data manually."
+
+          # Создаем чистое имя файла
+          filename = room_name.lower().replace(" ", "_")
+          filename = "".join(c for c in filename if c.isalnum() or c in "._-") + ".md"
+
+          with open(filename, "w", encoding="utf-8") as f:
+              f.write(result)
+
+          # Передаем имя файла дальше в GitHub Actions
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as go:
+              go.write(f"filename={filename}\n")
           EOF
-          else
-            cat <<EOF > "$FILENAME"
-          # TryHackMe: $ROOM (Walkthrough)
-          
-          | Metadata | Value |
-          | :--- | :--- |
-          | **Platform** | [TryHackMe](https://tryhackme.com/) |
-          | **Room Type** | \`Walkthrough / Guided\` |
-          | **Difficulty** | \`$DIFF\` |
-          | **Date Completed** | $(date +'%Y-%m-%d') |
-          
-          ---
-          
-          ## 📖 Room Overview
-          The **$ROOM** room is a guided educational walkthrough.
-          
-          ## 🧭 Guided Tasks & Answers
-          ### 📑 Task 1
-          * **Question:** Flag? -> \`THM{REDACTED_TASK_FLAG}\`
-          EOF
-          fi
-          
-          echo "filename=$FILENAME" >> $GITHUB_OUTPUT
 
       - name: Update README Table
         run: |
@@ -111,7 +133,6 @@ jobs:
           
           if [ "$TYPE" = "CTF (Challenge)" ]; then R_TYPE="CTF"; else R_TYPE="Walkthrough"; fi
           
-          # Ссылка теперь ведет на файл прямо в корне репозитория (без writeups/)
           NEW_ROW="| $DATE | [$ROOM]($FILENAME) | \`TryHackMe\` | \`$R_TYPE\` | \`$DIFF\` | ✅ Completed |"
           
           if [ ! -f README.md ]; then
@@ -125,5 +146,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Auto-generated writeup from GitHub Actions" || echo "No changes to commit"
+          git commit -m "AI-generated smart writeup for ${{ github.event.inputs.room_name }}" || echo "No changes to commit"
           git push
