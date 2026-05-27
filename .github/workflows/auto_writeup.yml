@@ -47,8 +47,8 @@ jobs:
         run: |
           pip install requests
 
-      - name: Generate Smart Writeup via Free AI
-        id: ai
+      - name: Generate Writeup and Update README
+        id: script
         env:
           ROOM_NAME: ${{ github.event.inputs.room_name }}
           ROOM_TYPE: ${{ github.event.inputs.room_type }}
@@ -58,7 +58,6 @@ jobs:
           python - << 'EOF'
           import os
           import requests
-          import json
           from datetime import datetime
 
           room_name = os.getenv("ROOM_NAME")
@@ -67,7 +66,7 @@ jobs:
           room_dump = os.getenv("ROOM_DUMP")
           current_date = datetime.now().strftime('%Y-%m-%d')
 
-          # Генерируем красивый дефолтный шаблон (на случай если ИИ лежит)
+          # 1. ГЕНЕРИРУЕМ ДЕФОЛТНЫЙ ШАБЛОН (НА СЛУЧАЙ ЕСЛИ ИИ ЛЕЖИТ)
           if room_type == "CTF (Challenge)":
               fallback_content = f"""# TryHackMe: {room_name} (CTF)
 
@@ -81,7 +80,7 @@ jobs:
           ---
 
           ## 📝 Executive Summary
-          This writeup covers the penetration testing methodology used to compromise the **{room_name}** machine based on room data.
+          This writeup covers the penetration testing methodology used to compromise the **{room_name}** machine.
 
           ## 🔍 Phase 1: Reconnaissance & Enumeration
           ```bash
@@ -124,7 +123,6 @@ jobs:
           print("[*] Trying to contact Free AI service...")
           
           try:
-              # Попытка использовать один из открытых API
               response = requests.post(
                   "https://open-ai-proxy.example.com/v1/chat/completions",
                   headers={"Content-Type": "application/json"},
@@ -137,25 +135,46 @@ jobs:
           except Exception as e:
               print(f"[!] AI Endpoint down or timed out ({e}). Using robust built-in template.")
 
-          # Очистка имени файла
+          # 2. СОХРАНЯЕМ ВРАЙТАП В КОРЕНЬ
           filename = room_name.lower().replace(" ", "_")
           filename = "".join(c for c in filename if c.isalnum() or c in "._-") + ".md"
 
           with open(filename, "w", encoding="utf-8") as f:
               f.write(result)
+          print(f"[+] File saved as {filename}")
 
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as go:
-              go.write(f"filename={filename}\n")
+          # 3. ОБНОВЛЯЕМ README.MD ЧЕРЕЗ PYTHON (ЗАМЕНА СТАРЫХ КОРЯВЫХ BASH КОМАНД)
+          r_type = "CTF" if room_type == "CTF (Challenge)" else "Walkthrough"
+          new_row = f"| {current_date} | [{room_name}]({filename}) | `TryHackMe` | `{r_type}` | `{room_diff}` | ✅ Completed |"
+
+          readme_path = "README.md"
+          if not os.path.exists(readme_path):
+              with open(readme_path, "w", encoding="utf-8") as f:
+                  f.write("# Cybersec Journey\n\n| Date | Room | Platform | Type | Difficulty | Status |\n| --- | --- | --- | --- | --- | --- |\n")
+
+          with open(readme_path, "r", encoding="utf-8") as f:
+              lines = f.readlines()
+
+          # Находим строку с разделителем таблицы и вставляем запись сразу под ней
+          inserted = False
+          for i, line in enumerate(lines):
+              if "| --- |" in line:
+                  lines.insert(i + 1, new_row + "\n")
+                  inserted = True
+                  break
+
+          if not inserted:
+              lines.append("\n" + new_row + "\n")
+
+          with open(readme_path, "w", encoding="utf-8") as f:
+              f.writelines(lines)
+          print("[+] README.md successfully updated!")
           EOF
 
-      - name: Update README Table
+      - name: Commit and Push changes
         run: |
-          ROOM="${{ github.event.inputs.room_name }}"
-          FILENAME="${{ steps.ai.outputs.filename }}"
-          DATE=$(date +'%Y-%m-%d')
-          DIFF="${{ github.event.inputs.difficulty }}"
-          TYPE="${{ github.event.inputs.room_type }}"
-          
-          if [ "$TYPE" = "CTF (Challenge)" ]; then R_TYPE="CTF"; else R_TYPE="Walkthrough"; fi
-          
-          NEW_
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Auto-generated writeup from GitHub Actions" || echo "No changes to commit"
+          git push
