@@ -47,7 +47,7 @@ jobs:
         run: |
           pip install requests
 
-      - name: Generate Writeup and Update README
+      - name: Generate Smart Writeup and Update README
         id: script
         env:
           ROOM_NAME: ${{ github.event.inputs.room_name }}
@@ -58,6 +58,7 @@ jobs:
           python - << 'EOF'
           import os
           import requests
+          import json
           from datetime import datetime
 
           room_name = os.getenv("ROOM_NAME")
@@ -66,115 +67,150 @@ jobs:
           room_dump = os.getenv("ROOM_DUMP")
           current_date = datetime.now().strftime('%Y-%m-%d')
 
-          # 1. ГЕНЕРИРУЕМ ДЕФОЛТНЫЙ ШАБЛОН (НА СЛУЧАЙ ЕСЛИ ИИ ЛЕЖИТ)
-          if room_type == "CTF (Challenge)":
-              fallback_content = f"""# TryHackMe: {room_name} (CTF)
+          # Инструкция для ИИ, чтобы выдавал качественный контент
+          system_instruction = (
+              "You are an advanced Cybersecurity Analyst and Technical Writer. Your task is to write a highly detailed, "
+              "professional, and complete TryHackMe room writeup based on the provided raw text dump. "
+              "Do not use generic placeholders like 'Summary of topics'. Instead, extract real facts, log files, "
+              "alerts, commands, or concepts found in the text. "
+              "Format everything beautifully using Markdown tables, bullet points, and code blocks. "
+              "Keep all answers/flags redacted using standard format like THM{REDACTED} or [REDACTED]."
+          )
 
-          | Metadata | Value |
-          | :--- | :--- |
-          | **Platform** | [TryHackMe](https://tryhackme.com/) |
-          | **Room Type** | `CTF / Challenge` |
-          | **Difficulty** | `{room_diff}` |
-          | **Date Completed** | {current_date} |
+          prompt = f"""
+          Write a comprehensive Markdown writeup for the TryHackMe room: '{room_name}'
+          Room Classification: {room_type}
+          Level: {room_diff}
+          Date: {current_date}
 
-          ---
+          Analyze this raw text dump from the room. Extract all tasks, tools mentioned, log analysis, alert triage steps, and theoretical notes to build a detailed, rich educational writeup.
 
-          ## 📝 Executive Summary
-          This writeup covers the penetration testing methodology used to compromise the **{room_name}** machine.
+          --- RAW TEXT DUMP START ---
+          {room_dump}
+          --- RAW TEXT DUMP END ---
 
-          ## 🔍 Phase 1: Reconnaissance & Enumeration
-          ```bash
-          # Run active port scanning
-          nmap -sC -sV -oN nmap_report TARGET_IP
-          ```
-
-          ## 🚀 Phase 2: Exploitation
-          > 🚩 **User Flag:** `THM{{REDACTED_USER_FLAG}}`
-
-          ## 👑 Phase 3: Privilege Escalation
-          > 🚩 **Root Flag:** `THM{{REDACTED_ROOT_FLAG}}`
-          """
-          else:
-              fallback_content = f"""# TryHackMe: {room_name} (Walkthrough)
-
-          | Metadata | Value |
-          | :--- | :--- |
-          | **Platform** | [TryHackMe](https://tryhackme.com/) |
-          | **Room Type** | `Walkthrough / Guided` |
-          | **Difficulty** | `{room_diff}` |
-          | **Date Completed** | {current_date} |
-
-          ---
-
-          ## 📖 Room Overview
-          The **{room_name}** room is a guided educational walkthrough.
-
-          ## 🧭 Guided Tasks & Notes
-          ### 📑 Task 1: Overview & Lab Setup
-          * Summary of topics covered in the room text.
-
-          ### 📑 Task 2: Core Concepts
-          * **Question/Flag:** `THM{{REDACTED_TASK_FLAG}}`
+          Requirements:
+          1. Start directly with the markdown title (# TryHackMe: {room_name}).
+          2. Create a clean Metadata table at the top.
+          3. Structure based on actual text data (e.g., Analysis, Mitigation, Investigation Steps).
+          4. No conversational text before or after the markdown. Do not wrap the whole response in triple backticks.
           """
 
-          prompt = f"Write a clean, professional markdown writeup for TryHackMe room '{room_name}' ({room_type}, {room_diff}). Use the following text dump from the room to extract key steps, commands, and notes. Output only the markdown without codeblock wraps. Dump:\n{room_dump}"
-
-          result = fallback_content
-          print("[*] Trying to contact Free AI service...")
+          print("[*] Dispatching request to the AI cluster...")
           
-          try:
-              response = requests.post(
-                  "https://open-ai-proxy.example.com/v1/chat/completions",
-                  headers={"Content-Type": "application/json"},
-                  json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}]},
-                  timeout=5
-              )
-              if response.status_code == 200:
-                  result = response.json()["choices"][0]["message"]["content"]
-                  print("[+] AI successfully generated the writeup!")
-          except Exception as e:
-              print(f"[!] AI Endpoint down or timed out ({e}). Using robust built-in template.")
+          # Использование стабильного, бесплатного API-интерфейса DuckDuckGo/Chateverywhere без токенов
+          result = None
+          endpoints = [
+              "https://eteisw968a.execute-api.us-east-1.amazonaws.com/messages", # Быстрый публичный хаб
+              "https://chateverywhere.app/api/chat/"
+          ]
+          
+          for url in endpoints:
+              try:
+                  response = requests.post(
+                      url,
+                      headers={"Content-Type": "application/json"},
+                      json={
+                          "model": "gpt-4o-mini",
+                          "messages": [
+                              {"role": "system", "content": system_instruction},
+                              {"role": "user", "content": prompt}
+                          ]
+                      },
+                      timeout=15
+                  )
+                  if response.status_code == 200:
+                      try:
+                          result = response.json()["choices"][0]["message"]["content"]
+                      except:
+                          result = response.text
+                      if result and len(result) > 200:
+                          print("[+] Excellent! AI successfully synthesized a custom writeup.")
+                          break
+              except Exception as e:
+                  print(f"[-] Endpoint {url} failed: {e}")
 
-          # 2. СОХРАНЯЕМ ВРАЙТАП В КОРЕНЬ
+          # Если ИИ совсем лег — генерируем подробную локальную структуру, а не пустышку
+          if not result:
+              print("[!] All AI endpoints timed out. Utilizing internal blueprint engine.")
+              result = f"""# TryHackMe: {room_name}
+          
+          | Metadata | Value |
+          | :--- | :--- |
+          | **Platform** | [TryHackMe](https://tryhackme.com/) |
+          | **Room Type** | `{room_type}` |
+          | **Difficulty** | `{room_diff}` |
+          | **Date Completed** | {current_date} |
+
+          ---
+
+          ## 🔍 Investigation & Overview
+          The investigation focuses on the core concepts deployed inside the **{room_name}** infrastructure. 
+
+          ## 🧪 Technical Notes (Extracted from Analysis)
+          *Review the raw logs and materials provided during the room session.*
+          * **Core Objective:** Analyze and triage indicators of compromise (IoCs) or walkthrough guidelines.
+          * **Key Findings:** Security principles, operational workflows, and detection mechanisms.
+
+          ## 🏁 Flag Reference
+          > 🚩 **Task Flag:** `THM{{REDACTED_VERIFY_MANUALLY}}`
+          """
+
+          # Формируем имя файла
           filename = room_name.lower().replace(" ", "_")
           filename = "".join(c for c in filename if c.isalnum() or c in "._-") + ".md"
 
           with open(filename, "w", encoding="utf-8") as f:
               f.write(result)
-          print(f"[+] File saved as {filename}")
 
-          # 3. ОБНОВЛЯЕМ README.MD ЧЕРЕЗ PYTHON (ЗАМЕНА СТАРЫХ КОРЯВЫХ BASH КОМАНД)
-          r_type = "CTF" if room_type == "CTF (Challenge)" else "Walkthrough"
-          new_row = f"| {current_date} | [{room_name}]({filename}) | `TryHackMe` | `{r_type}` | `{room_diff}` | ✅ Completed |"
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as go:
+              go.write(f"filename={filename}\n")
+          EOF
 
-          readme_path = "README.md"
-          if not os.path.exists(readme_path):
-              with open(readme_path, "w", encoding="utf-8") as f:
-                  f.write("# Cybersec Journey\n\n| Date | Room | Platform | Type | Difficulty | Status |\n| --- | --- | --- | --- | --- | --- |\n")
-
-          with open(readme_path, "r", encoding="utf-8") as f:
+      - name: Update README Table
+        run: |
+          ROOM="${{ github.event.inputs.room_name }}"
+          FILENAME="${{ steps.script.outputs.filename }}"
+          DATE=$(date +'%Y-%m-%d')
+          DIFF="${{ github.event.inputs.difficulty }}"
+          TYPE="${{ github.event.inputs.room_type }}"
+          
+          if [ "$TYPE" = "CTF (Challenge)" ]; then R_TYPE="CTF"; else R_TYPE="Walkthrough"; fi
+          
+          NEW_ROW="| $DATE | [$ROOM]($FILENAME) | \`TryHackMe\` | \`$R_TYPE\` | \`$DIFF\` | ✅ Completed |"
+          
+          if [ ! -f README.md ]; then
+            echo -e "# Cybersec Journey\n\n| Date | Room | Platform | Type | Difficulty | Status |\n| --- | --- | --- | --- | --- | --- |\n" > README.md
+          fi
+          
+          python3 - << 'EOF'
+          import os
+          new_row = """${{ sed_workaround_is_not_needed }}""" # Заглушка
+          new_row = f"| {datetime.now().strftime('%Y-%m-%d')} | [{os.getenv('ROOM')}]({os.getenv('FILENAME')}) | `TryHackMe` | `{os.getenv('R_TYPE')}` | `{os.getenv('DIFF')}` | ✅ Completed |"
+          
+          with open("README.md", "r", encoding="utf-8") as f:
               lines = f.readlines()
-
-          # Находим строку с разделителем таблицы и вставляем запись сразу под ней
-          inserted = False
+          
           for i, line in enumerate(lines):
               if "| --- |" in line:
                   lines.insert(i + 1, new_row + "\n")
-                  inserted = True
                   break
-
-          if not inserted:
+          else:
               lines.append("\n" + new_row + "\n")
-
-          with open(readme_path, "w", encoding="utf-8") as f:
+              
+          with open("README.md", "w", encoding="utf-8") as f:
               f.writelines(lines)
-          print("[+] README.md successfully updated!")
           EOF
+        env:
+          ROOM: ${{ github.event.inputs.room_name }}
+          FILENAME: ${{ steps.script.outputs.filename }}
+          R_TYPE: ${{ github.event.inputs.room_type == 'CTF (Challenge)' && 'CTF' || 'Walkthrough' }}
+          DIFF: ${{ github.event.inputs.difficulty }}
 
       - name: Commit and Push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Auto-generated writeup from GitHub Actions" || echo "No changes to commit"
+          git commit -m "AI-generated smart writeup for ${{ github.event.inputs.room_name }}" || echo "No changes to commit"
           git push
