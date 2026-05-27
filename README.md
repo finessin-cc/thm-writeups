@@ -1,112 +1,55 @@
-# Writeup Automation — AI-Powered Publishing Flow
+# How I Automated My TryHackMe Writeups Using GitHub Actions
 
-Automated TryHackMe writeup generation using Claude AI.
-From room name to GitHub commit in under 7 minutes.
-
----
-
-## How it works
-
-```
-Room name
-    ↓
-AI generates writeup (Claude Sonnet)
-    ↓
-Review + insert real flags (2–3 min)
-    ↓
-Download .md → place in thm-writeups/
-    ↓
-git add → commit → push
-```
+| Metadata | Value |
+| :--- | :--- |
+| **Project Type** | DevOps / Automation / Scripting |
+| **Target Platform** | GitHub Actions |
+| **Goal** | Reduce writeup publication time to < 10 seconds |
+| **Status** | 🚀 Fully Operational |
 
 ---
 
-## The tool
+## 📝 Executive Summary
+As a cybersecurity student active on **TryHackMe**, documenting rooms and building a portfolio is essential. However, manually creating Markdown skeletons, copying templates, and updating the main repository index (`README.md`) is highly repetitive and time-consuming. 
 
-A web app built as a Claude AI artifact — runs in the browser, no installation required.
-
-What it does:
-- Takes the room name, difficulty, and categories as input
-- Calls the Claude API (`claude-sonnet-4-20250514`)
-- Generates a structured `.md` writeup in ~10 seconds
-- Provides a download button and ready-to-paste git commands
+To solve this, I designed and implemented a custom **CI/CD automation workflow** using **GitHub Actions**. Now, publishing a structured writeup skeleton with a synchronized index update takes exactly **one click** and less than 10 seconds, leaving room only for actual flag submission.
 
 ---
 
-## Writeup structure
+## 🛠️ The Problem & Solution
 
-Every generated file follows this template:
-
-```markdown
----
-title: Room Name
-date: YYYY-MM-DD
-difficulty: Easy / Medium / Hard
-categories: [Web, Linux, Privesc, ...]
-platform: TryHackMe
-status: completed
----
-
-## Overview
-## Reconnaissance
-## Enumeration
-## Exploitation
-## Privilege Escalation
-## Flags / Answers
-## Key Takeaways
-## Tools Used
-```
+### The Lazy (Efficient) Developer's Mindset:
+* **Before:** Finish a room ➔ Create a `.md` file ➔ Copy-paste a structural template ➔ Fill out metadata ➔ Open `README.md` ➔ Manually append a new row to the tracking table ➔ Run Git commands (`add`, `commit`, `push`). Total time: ~5-7 minutes of boring routine.
+* **After:** Finish a room ➔ Go to GitHub Actions ➔ Enter Room Name & Type ➔ Click "Run". Total time: **5 seconds**.
 
 ---
 
-## Publishing flow
+## ⚙️ Technical Implementation
 
-After downloading the `.md` file:
+The system is powered by a custom GitHub Workflow definition (`.github/workflows/auto_writeup.yml`). It triggers on-demand (`workflow_dispatch`) and dynamically adapts based on user inputs.
 
-```bash
-mv ~/Downloads/room-name.md thm-writeups/
-
-git add room-name.md
-git commit -m "writeup: Room Name"
-git push origin main
-```
+### Key Features:
+1. **Dynamic Templating:** The automation distinguishes between **CTF (Challenge)** rooms (focusing on Recon, Exploitation, and PrivEsc) and **Walkthrough (Guided)** rooms (focusing on theoretical tasks, answers, and concepts).
+2. **Automated Indexing:** A Bash script uses `sed` stream editing to instantly parse `README.md` and insert the new room into the main tracking table right below the header.
+3. **Frictionless Deployment:** The runner natively configures a `github-actions[bot]` Git identity, stages the generated files, and pushes them directly back into the repository root.
 
 ---
 
-## What still requires manual input
+## 🚀 How It Works (The Flow)
 
-The AI generates structure and technical content based on the room type.
-The only manual steps are:
+Whenever I complete a room, I execute the following process from any device (even a smartphone):
 
-- Insert real flags (replacing `FLAG{REDACTED}` placeholders)
-- Adjust any room-specific details if needed
-- Run git push
-
-Total time: approximately 5 minutes per room.
-
----
-
-## Stack
-
-| Component       | Technology                                    |
-|-----------------|-----------------------------------------------|
-| AI generation   | Claude Sonnet (`claude-sonnet-4-20250514`)    |
-| Interface       | HTML/JS artifact in Claude.ai                 |
-| Writeup hosting | GitHub (`thm-writeups/`)                      |
-| Portfolio site  | GitHub Pages (`finessin-cc.github.io`)        |
+1. **Trigger:** Navigate to the **Actions** tab in my repository.
+2. **Input:** Select the `Generate Writeup Automatically` workflow and fill in the required parameters:
+   * **Room Name:** (e.g., `Pickle Rick`)
+   * **Room Type:** `CTF (Challenge)` or `Walkthrough (Guided/Theory)`
+   * **Difficulty:** `Easy`, `Medium`, etc.
+3. **Execution:** The automated runner triggers, builds the clean Markdown file in the root directory, updates the index table, and commits the changes.
 
 ---
 
-## Before and after
+## 🧠 Key Takeaways
 
-|                        | Before             | After               |
-|------------------------|--------------------|---------------------|
-| Time per writeup       | 30–60 min          | 5–7 min             |
-| Rooms published/week   | ~0 (kept delaying) | Every room cleared  |
-| Structure              | Undefined          | Consistent template |
-
----
-
-Part of [thm-writeups](https://github.com/finessin-cc/thm-writeups) — my TryHackMe writeup collection.
-
-| 2026-05-27 | [SOC L1 Alert Triage](writeups/soc_l1_alert_triage.md) | `TryHackMe` | ✅ Completed |
+* **Efficiency First:** In cybersecurity, scripting and automating routine tasks separates high-velocity analysts from the rest. 
+* **Portfolio Showcase:** This automation ensures that my portfolio stays clean, uniform, and updated without causing documentation fatigue. 
+* **Tooling Learned:** Gained practical experience with GitHub Actions syntax, workflow permissions, Bash string manipulation, and CI/CD pipelines.
