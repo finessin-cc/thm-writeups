@@ -108,3 +108,5 @@ Total time: approximately 5 minutes per room.
 ---
 
 Part of [thm-writeups](https://github.com/finessin-cc/thm-writeups) — my TryHackMe writeup collection.
+
+| 2026-05-27 | [SOC L1 Alert Triage](writeups/soc_l1_alert_triage.md) | `TryHackMe` | ✅ Completed |
