@@ -46,15 +46,12 @@ jobs:
           TYPE="${{ github.event.inputs.room_type }}"
           DIFF="${{ github.event.inputs.difficulty }}"
           
-          # Очищаем имя файла
+          # Очищаем имя файла и заменяем пробелы на нижнее подчеркивание
           FILENAME=$(echo "$ROOM" | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
           FILENAME=$(echo "$FILENAME" | sed 's/[^a-zA-Z0-9_.]//g').md
           
-          TARGET_DIR="writeups"
-          mkdir -p "$TARGET_DIR"
-          
           if [ "$TYPE" = "CTF (Challenge)" ]; then
-            cat <<EOF > "$TARGET_DIR/$FILENAME"
+            cat <<EOF > "$FILENAME"
           # TryHackMe: $ROOM (CTF)
           
           | Metadata | Value |
@@ -81,7 +78,7 @@ jobs:
           > 🚩 **Root Flag:** \`THM{REDACTED_ROOT_FLAG}\`
           EOF
           else
-            cat <<EOF > "$TARGET_DIR/$FILENAME"
+            cat <<EOF > "$FILENAME"
           # TryHackMe: $ROOM (Walkthrough)
           
           | Metadata | Value |
@@ -114,14 +111,13 @@ jobs:
           
           if [ "$TYPE" = "CTF (Challenge)" ]; then R_TYPE="CTF"; else R_TYPE="Walkthrough"; fi
           
-          NEW_ROW="| $DATE | [$ROOM](writeups/$FILENAME) | \`TryHackMe\` | \`$R_TYPE\` | \`$DIFF\` | ✅ Completed |"
+          # Ссылка теперь ведет на файл прямо в корне репозитория (без writeups/)
+          NEW_ROW="| $DATE | [$ROOM]($FILENAME) | \`TryHackMe\` | \`$R_TYPE\` | \`$DIFF\` | ✅ Completed |"
           
-          # Если README.md вообще нет, создаем базовый
           if [ ! -f README.md ]; then
             echo -e "# Cybersec Journey\n\n| Date | Room | Platform | Type | Difficulty | Status |\n| --- | --- | --- | --- | --- | --- |" > README.md
           fi
           
-          # Добавляем строку в таблицу
           sed -i "/| --- |/a $NEW_ROW" README.md
 
       - name: Commit and Push changes
@@ -129,6 +125,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          # Пишем простое и надежное сообщение коммита без лишних bash-переменных
           git commit -m "Auto-generated writeup from GitHub Actions" || echo "No changes to commit"
           git push
