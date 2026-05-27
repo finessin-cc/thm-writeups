@@ -85,7 +85,8 @@ jobs:
 
           ## 🔍 Phase 1: Reconnaissance & Enumeration
           ```bash
-          nmap -sC -sV -oN nmap_report ${{TARGET_IP}}
+          # Run active port scanning
+          nmap -sC -sV -oN nmap_report TARGET_IP
           ```
 
           ## 🚀 Phase 2: Exploitation
@@ -125,7 +126,7 @@ jobs:
           try:
               # Попытка использовать один из открытых API
               response = requests.post(
-                  "https://open-ai-proxy.example.com/v1/chat/completions", # Фейковый для примера, используем резервный рабочий публичный хаб если надо, но делаем безопасный блок
+                  "https://open-ai-proxy.example.com/v1/chat/completions",
                   headers={"Content-Type": "application/json"},
                   json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}]},
                   timeout=5
@@ -157,18 +158,4 @@ jobs:
           
           if [ "$TYPE" = "CTF (Challenge)" ]; then R_TYPE="CTF"; else R_TYPE="Walkthrough"; fi
           
-          NEW_ROW="| $DATE | [$ROOM]($FILENAME) | \`TryHackMe\` | \`$R_TYPE\` | \`$DIFF\` | ✅ Completed |"
-          
-          if [ ! -f README.md ]; then
-            echo -e "# Cybersec Journey\n\n| Date | Room | Platform | Type | Difficulty | Status |\n| --- | --- | --- | --- | --- | --- |" > README.md
-          fi
-          
-          sed -i "/| --- |/a $NEW_ROW" README.md
-
-      - name: Commit and Push changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "Auto-generated writeup for ${{ github.event.inputs.room_name }}" || echo "No changes to commit"
-          git push
+          NEW_
