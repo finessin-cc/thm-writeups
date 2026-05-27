@@ -67,71 +67,48 @@ jobs:
           room_dump = os.getenv("ROOM_DUMP")
           current_date = datetime.now().strftime('%Y-%m-%d')
 
-          # Инструкции, заставляющие ИИ генерировать глубокий разбор, а не отписку
-          system_context = (
-              "You are an elite Cyber Security Technical Writer. Write an extensive, professional, "
-              "and highly technical TryHackMe room writeup based *only* on the provided raw data dump. "
-              "Incorporate logs, alert details, analysis steps, and real technical concepts found in the text. "
-              "Do not use generic sentences like 'Review logs manually'. Break everything down into tasks "
-              "with real extracted content. Use markdown tables, codeblocks, and bold text. Redact flags as THM{REDACTED}."
+          # Формируем жесткий и понятный промпт для ИИ без использования кавычек внутри строки
+          prompt_content = (
+              f"You are an Expert Cyber Security Analyst. Generate a detailed, highly technical "
+              f"Markdown writeup for the TryHackMe room '{room_name}'.\n"
+              f"Metadata: Type={room_type}, Difficulty={room_diff}, Date={current_date}.\n\n"
+              f"Task: Based on the raw room dump text provided below, extract ALL important parts: "
+              f"tasks, sub-tasks, questions, answers (redact them as THM{{REDACTED}}), logs, alert fields, "
+              f"investigation steps, and code snippets. Do NOT write generic summaries. Structure it like "
+              f"a real, completed walkthough or CTF report. Output ONLY clean markdown starting with # TryHackMe.\n\n"
+              f"--- RAW ROOM DUMP ---\n{room_dump}"
           )
 
-          user_prompt = (
-              f"Create a deep technical markdown writeup for TryHackMe room: '{room_name}'.\n"
-              f"Type: {room_type}, Difficulty: {room_diff}, Date: {current_date}.\n"
-              f"Extract every piece of analytical data, steps, alerts, or questions from this raw dump:\n\n"
-              f"{room_dump}"
-          )
-
-          # Качественный развернутый шаблон на экстренный случай
-          fallback_content = f"""# TryHackMe: {room_name}
-
-          | Metadata | Value |
-          | :--- | :--- |
-          | **Platform** | [TryHackMe](https://tryhackme.com/) |
-          | **Room Type** | `{room_type}` |
-          | **Difficulty** | `{room_diff}` |
-          | **Date Completed** | {current_date} |
-
-          ---
-
-          ## 🔍 Technical Analysis & Investigation
-          The core objective of the **{room_name}** infrastructure assessment is to analyze indicators of compromise (IoCs), triage deployment logs, and document the defensive or offensive mechanisms outlined in the guided tasks.
-
-          ## 🛠️ Extracted Room Mechanics & Notes
-          * **Operational Architecture:** Review the internal networks, service daemons, and endpoint configurations provided during the runtime lab.
-          * **Incident Response Pipeline:** Analyzing alerting logic, log structures, and mitigation techniques to solve the scenario.
-
-          ## 🏁 Flag Reference Matrix
-          > 🚩 **Task Indicator:** `THM{{REDACTED_VERIFY_VIA_LAB}}`
-          """
+          # Базовый аварийный контент (если сеть совсем упадет)
+          fallback_content = f"# TryHackMe: {room_name}\n\n| Metadata | Value |\n| --- | --- |\n| **Date** | {current_date} |\n\n## Analysis Failed\nAI request blocked."
 
           result = None
           
           try:
-              print("[*] Contacting the high-speed AI generation cluster...")
-              # Используем надёжный endpoint Pollinations с моделью Mistral/Llama для ИТ-документации
+              print("[*] Connecting to stable Llama-3 generation cluster...")
+              # Используем Pollinations, но через чистый POST-запрос к проверенной модели qwen-coder/llama
               response = requests.post(
                   "https://text.pollinations.ai/",
                   json={
                       "messages": [
-                          {"role": "system", "content": system_context},
-                          {"role": "user", "content": user_prompt}
+                          {"role": "user", "content": prompt_content}
                       ],
-                      "model": "mistral"
+                      "model": "qwen-coder",
+                      "jsonMode": False
                   },
-                  timeout=45
+                  timeout=60
               )
-              if response.status_code == 200 and len(response.text) > 200:
+              
+              if response.status_code == 200 and len(response.text) > 300:
                   result = response.text
-                  print("[+] AI successfully parsed the dump and built a rich writeup!")
+                  print("[+] Success! Real AI writeup generated.")
           except Exception as e:
-              print(f"[-] AI cluster generation timed out ({e}). Using structural blueprint.")
+              print(f"[-] AI connection failed: {e}")
 
           if not result:
               result = fallback_content
 
-          # Форматируем имя файла в безопасный вид
+          # Очистка имени файла
           filename = room_name.lower().replace(" ", "_")
           filename = "".join(c for c in filename if c.isalnum() or c in "._-") + ".md"
 
@@ -176,7 +153,6 @@ jobs:
 
           with open(readme_path, "w", encoding="utf-8") as f:
               f.writelines(lines)
-          print("[+] README.md table sync completed.")
           EOF
         env:
           ROOM: ${{ github.event.inputs.room_name }}
@@ -189,5 +165,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Auto-generated writeup from GitHub Actions" || echo "No changes to commit"
+          git commit -m "AI smart writeup for ${{ github.event.inputs.room_name }}" || echo "No changes to commit"
           git push
