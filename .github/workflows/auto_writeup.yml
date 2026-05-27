@@ -46,13 +46,14 @@ jobs:
           TYPE="${{ github.event.inputs.room_type }}"
           DIFF="${{ github.event.inputs.difficulty }}"
           
-          FILENAME=$(echo "$ROOM" | tr '[:upper:]' '[:lower:]' | tr ' ' '_').md
-          FILENAME=$(echo "$FILENAME" | sed 's/[^a-zA-Z0-9_.]//g')
-          TARGET_DIR="writeups"
+          # Очищаем имя файла
+          FILENAME=$(echo "$ROOM" | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
+          FILENAME=$(echo "$FILENAME" | sed 's/[^a-zA-Z0-9_.]//g').md
           
-          # Проверяем тип комнаты и генерируем соответствующий шаблон
+          TARGET_DIR="writeups"
+          mkdir -p "$TARGET_DIR"
+          
           if [ "$TYPE" = "CTF (Challenge)" ]; then
-            # Шаблон для CTF комнат
             cat <<EOF > "$TARGET_DIR/$FILENAME"
           # TryHackMe: $ROOM (CTF)
           
@@ -66,34 +67,20 @@ jobs:
           ---
           
           ## 📝 Executive Summary
-          This writeup covers the penetration testing methodology used to compromise the **$ROOM** machine. The process involves active reconnaissance, vulnerability exploitation, and privilege escalation to gain full root access.
+          This writeup covers the penetration testing methodology used to compromise the **$ROOM** machine.
           
           ## 🔍 Phase 1: Reconnaissance & Enumeration
           \`\`\`bash
-          # Initial network scanning
           nmap -sC -sV -oN nmap_report \${TARGET_IP}
           \`\`\`
-          *Enumeration of open ports, services, and hidden web directories.*
           
           ## 🚀 Phase 2: Exploitation
-          * **Vulnerability:** (e.g., Public CVE, Misconfiguration, Weak Credentials)
-          * **Action:** Exploit execution to drop a low-privilege reverse shell.
-          
           > 🚩 **User Flag:** \`THM{REDACTED_USER_FLAG}\`
           
           ## 👑 Phase 3: Privilege Escalation
-          * **Vector:** (e.g., SUID, Cron jobs, \`sudo -l\` misconfiguration)
-          * **Action:** Escalating privileges to the root user.
-          
           > 🚩 **Root Flag:** \`THM{REDACTED_ROOT_FLAG}\`
-          
-          ---
-          ## 🧠 Key Takeaways
-          * Document critical lessons learned from this challenge here.
           EOF
-          
           else
-            # Шаблон для Walkthrough / Теоретических комнат
             cat <<EOF > "$TARGET_DIR/$FILENAME"
           # TryHackMe: $ROOM (Walkthrough)
           
@@ -107,32 +94,11 @@ jobs:
           ---
           
           ## 📖 Room Overview
-          The **$ROOM** room is a guided educational walkthrough focused on teaching core concepts about cybersecurity, specific tools, or concepts. 
-          
-          ---
+          The **$ROOM** room is a guided educational walkthrough.
           
           ## 🧭 Guided Tasks & Answers
-          
-          ### 📑 Task 1: Introduction / Deployment
-          *Overview of the room goals and setting up the target environment.*
-          * **Question:** Room deployed? -> *Answer: No answer needed*
-          
-          ### 📑 Task 2: Core Concepts & Theory
-          *Notes on the main theoretical part covered in this section.*
-          * **Key Concept 1:** (Write down important notes or commands learned)
-          * **Question/Flag:** \`THM{REDACTED_TASK_FLAG}\`
-          
-          ### 📑 Task 3: Practical Application / Lab
-          *Step-by-step walkthrough of the practical steps shown in the guide.*
-          \`\`\`bash
-          # Example of tool usage learned in this task
-          tool_name -h
-          \`\`\`
-          * **Question/Flag:** \`THM{REDACTED_TASK_FLAG}\`
-          
-          ---
-          ## 🧠 Summary & Key Takeaways
-          * What new tools, techniques, or security concepts did this walkthrough teach?
+          ### 📑 Task 1
+          * **Question:** Flag? -> \`THM{REDACTED_TASK_FLAG}\`
           EOF
           fi
           
@@ -146,21 +112,23 @@ jobs:
           DIFF="${{ github.event.inputs.difficulty }}"
           TYPE="${{ github.event.inputs.room_type }}"
           
-          # Короткое имя типа для таблицы
           if [ "$TYPE" = "CTF (Challenge)" ]; then R_TYPE="CTF"; else R_TYPE="Walkthrough"; fi
           
           NEW_ROW="| $DATE | [$ROOM](writeups/$FILENAME) | \`TryHackMe\` | \`$R_TYPE\` | \`$DIFF\` | ✅ Completed |"
           
-          if grep -q "| --- |" README.md; then
-            sed -i "/| --- |/a $NEW_ROW" README.md
-          else
-            echo -e "\n$NEW_ROW" >> README.md
+          # Если README.md вообще нет, создаем базовый
+          if [ ! -f README.md ]; then
+            echo -e "# Cybersec Journey\n\n| Date | Room | Platform | Type | Difficulty | Status |\n| --- | --- | --- | --- | --- | --- |" > README.md
           fi
+          
+          # Добавляем строку в таблицу
+          sed -i "/| --- |/a $NEW_ROW" README.md
 
       - name: Commit and Push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Auto-generated writeup ($R_TYPE) for $ROOM"
+          # Пишем простое и надежное сообщение коммита без лишних bash-переменных
+          git commit -m "Auto-generated writeup from GitHub Actions" || echo "No changes to commit"
           git push
