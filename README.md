@@ -53,3 +53,8 @@ Whenever I complete a room, I execute the following process from any device (eve
 * **Efficiency First:** In cybersecurity, scripting and automating routine tasks separates high-velocity analysts from the rest. 
 * **Portfolio Showcase:** This automation ensures that my portfolio stays clean, uniform, and updated without causing documentation fatigue. 
 * **Tooling Learned:** Gained practical experience with GitHub Actions syntax, workflow permissions, Bash string manipulation, and CI/CD pipelines.
+
+* ### Key Features:
+1. **AI-Powered Parsing:** Dynamic integration with a free LLM endpoint that accepts a raw dump of the TryHackMe room text, analyzes tasks, hints, and instructions, and synthesizes an intelligent, bespoke writeup.
+2. **Context-Aware Formatting:** Automatically structures files into professional penetration testing summaries or clean training guides based on the underlying machine logic.
+3. **Automated Indexing:** Utilizes Unix `sed` tools to dynamically rebuild the repository's `README.md` catalog upon code integration.
